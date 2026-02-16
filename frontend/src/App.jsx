@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import DarkModeToggle from './components/DarkModeToggle'
-import { useTheme } from './components/ThemeContext'
+import DarkModeToggle from './components/ui/DarkModeToggle'
+import { useTheme } from './components/ui/ThemeContext'
 
 const defaultInputs = {
   current_age: 30,
