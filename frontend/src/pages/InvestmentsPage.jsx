@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useInvestments } from '../hooks/useInvestments'
 import { usePortfolioSummary } from '../hooks/usePortfolioSummary'
+import { useStockQuote } from '../hooks/useStockQuote'
 import PortfolioDashboard from '../components/investments/PortfolioDashboard'
 import InvestmentList from '../components/investments/InvestmentList'
 import InvestmentForm from '../components/investments/InvestmentForm'
@@ -23,6 +24,7 @@ export default function InvestmentsPage() {
   } = useInvestments()
 
   const summary = usePortfolioSummary(investments)
+  const { fetchQuote, fetchBatchQuotes, loading: refreshing } = useStockQuote()
 
   const [showForm, setShowForm] = useState(false)
   const [editingInvestment, setEditingInvestment] = useState(null)
@@ -60,6 +62,42 @@ export default function InvestmentsPage() {
         setSelectedInvestment(null)
       }
       setShowDeleteConfirm(null)
+    }
+  }
+
+  const handleRefreshPrice = async (investment) => {
+    if (!investment.ticker) return
+    const quote = await fetchQuote(investment.ticker)
+    if (quote && quote.price) {
+      updateInvestment({
+        ...investment,
+        currentPricePerShare: quote.price,
+        name: quote.name || investment.name,
+        lastPriceUpdate: new Date().toISOString(),
+      })
+    }
+  }
+
+  const handleRefreshAll = async () => {
+    const tickers = investments
+      .filter(inv => inv.ticker)
+      .map(inv => inv.ticker)
+
+    if (tickers.length === 0) return
+
+    const quotes = await fetchBatchQuotes(tickers)
+    for (const quote of quotes) {
+      if (quote.success && quote.price) {
+        const inv = investments.find(i => i.ticker.toUpperCase() === quote.symbol)
+        if (inv) {
+          updateInvestment({
+            ...inv,
+            currentPricePerShare: quote.price,
+            name: quote.name || inv.name,
+            lastPriceUpdate: new Date().toISOString(),
+          })
+        }
+      }
     }
   }
 
@@ -147,6 +185,13 @@ export default function InvestmentsPage() {
             Export
           </button>
           <button
+            onClick={handleRefreshAll}
+            disabled={refreshing}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh All Prices'}
+          </button>
+          <button
             onClick={handleAdd}
             className="rounded-md bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground shadow hover:opacity-90 transition-colors"
           >
@@ -161,6 +206,7 @@ export default function InvestmentsPage() {
         onSelect={setSelectedInvestment}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onRefreshPrice={handleRefreshPrice}
         selectedId={selectedInvestment?.id}
       />
 
@@ -212,7 +258,7 @@ export default function InvestmentsPage() {
               </button>
               <button
                 onClick={confirmDelete}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 transition-colors"
               >
                 Delete
               </button>

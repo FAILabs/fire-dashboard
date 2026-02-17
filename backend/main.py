@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
+import httpx
 
 app = FastAPI(title="FI/RE Dashboard API")
 
@@ -231,3 +232,126 @@ def project_portfolio(input_data: PortfolioProjectionInput):
 @app.get("/health")
 def health_check():
     return {"status": "healthy"}
+
+
+# --- Stock API Proxy Endpoints ---
+
+class TickerSearchResult(BaseModel):
+    symbol: str
+    name: str
+    type: str
+    exchange: str
+
+class TickerSearchResponse(BaseModel):
+    results: List[TickerSearchResult]
+
+class StockQuoteResponse(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    currency: str
+    market_state: str
+
+class BatchQuoteRequest(BaseModel):
+    tickers: List[str]
+
+class BatchQuoteResult(BaseModel):
+    symbol: str
+    name: str
+    price: float
+    success: bool
+    error: Optional[str] = None
+
+class BatchQuoteResponse(BaseModel):
+    results: List[BatchQuoteResult]
+
+YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+@app.get("/search-ticker", response_model=TickerSearchResponse)
+async def search_ticker(q: str):
+    """Search for stock tickers via Yahoo Finance."""
+    if not q or len(q.strip()) < 1:
+        return TickerSearchResponse(results=[])
+
+    url = "https://query1.finance.yahoo.com/v1/finance/search"
+    params = {
+        "q": q.strip(),
+        "quotesCount": 8,
+        "newsCount": 0,
+        "listsCount": 0,
+        "enableFuzzyQuery": False,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, params=params, headers=YAHOO_HEADERS, timeout=5.0)
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = []
+        for quote in data.get("quotes", []):
+            if quote.get("quoteType") in ("EQUITY", "ETF", "MUTUALFUND", "INDEX"):
+                results.append(TickerSearchResult(
+                    symbol=quote.get("symbol", ""),
+                    name=quote.get("shortname") or quote.get("longname", ""),
+                    type=quote.get("quoteType", ""),
+                    exchange=quote.get("exchange", ""),
+                ))
+
+        return TickerSearchResponse(results=results)
+    except Exception:
+        return TickerSearchResponse(results=[])
+
+
+async def _fetch_quote(client: httpx.AsyncClient, ticker: str) -> dict:
+    """Fetch a single stock quote from Yahoo Finance."""
+    url = f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ticker.upper()}"
+    params = {"modules": "price"}
+    resp = await client.get(url, params=params, headers=YAHOO_HEADERS, timeout=5.0)
+    resp.raise_for_status()
+    data = resp.json()
+    price_data = data["quoteSummary"]["result"][0]["price"]
+    return {
+        "symbol": price_data.get("symbol", ticker.upper()),
+        "name": price_data.get("shortName") or price_data.get("longName", ""),
+        "price": price_data.get("regularMarketPrice", {}).get("raw", 0),
+        "currency": price_data.get("currency", "USD"),
+        "market_state": price_data.get("marketState", "CLOSED"),
+    }
+
+
+@app.get("/stock-quote/{ticker}", response_model=StockQuoteResponse)
+async def get_stock_quote(ticker: str):
+    """Fetch current stock quote from Yahoo Finance."""
+    try:
+        async with httpx.AsyncClient() as client:
+            quote = await _fetch_quote(client, ticker)
+        return StockQuoteResponse(**quote)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch quote for {ticker}: {str(e)}")
+
+
+@app.post("/stock-quotes-batch", response_model=BatchQuoteResponse)
+async def get_stock_quotes_batch(request: BatchQuoteRequest):
+    """Fetch quotes for multiple tickers."""
+    results = []
+    async with httpx.AsyncClient() as client:
+        for ticker in request.tickers[:20]:
+            try:
+                quote = await _fetch_quote(client, ticker)
+                results.append(BatchQuoteResult(
+                    symbol=quote["symbol"],
+                    name=quote["name"],
+                    price=quote["price"],
+                    success=True,
+                ))
+            except Exception as e:
+                results.append(BatchQuoteResult(
+                    symbol=ticker.upper(),
+                    name="",
+                    price=0,
+                    success=False,
+                    error=str(e),
+                ))
+
+    return BatchQuoteResponse(results=results)

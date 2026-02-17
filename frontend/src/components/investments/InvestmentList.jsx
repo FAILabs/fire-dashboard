@@ -11,7 +11,7 @@ const SORT_OPTIONS = [
   { value: 'contribution_desc', label: 'Monthly Contribution (High to Low)' },
 ]
 
-export default function InvestmentList({ investments, onSelect, onEdit, onDelete, selectedId }) {
+export default function InvestmentList({ investments, onSelect, onEdit, onDelete, onRefreshPrice, selectedId }) {
   const [sortBy, setSortBy] = useState('value_desc')
   const [filterType, setFilterType] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -112,6 +112,7 @@ export default function InvestmentList({ investments, onSelect, onEdit, onDelete
             onSelect={onSelect}
             onEdit={onEdit}
             onDelete={onDelete}
+            onRefreshPrice={onRefreshPrice}
             isSelected={inv.id === selectedId}
           />
         ))}

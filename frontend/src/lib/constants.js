@@ -54,6 +54,17 @@ export const CHART_COLORS = [
   'hsl(262 83% 58%)',         // violet
 ]
 
+export const DEFAULT_RETURNS_BY_TYPE = {
+  stock: 10.0,
+  etf: 8.0,
+  index_fund: 8.0,
+  mutual_fund: 7.0,
+  bond: 4.0,
+  crypto: 15.0,
+  real_estate: 8.0,
+  other: 7.0,
+}
+
 export const API_BASE_URL = 'http://localhost:8000'
 
 export const DEFAULT_PROJECTION_YEARS = 30

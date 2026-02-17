@@ -1,8 +1,23 @@
 import { useState } from 'react'
 import { Select } from '../ui/select'
 import { Textarea } from '../ui/textarea'
+import { InfoTooltip } from '../ui/info-tooltip'
 import TagManager from './TagManager'
-import { INVESTMENT_TYPES, DEFAULT_EXPECTED_RETURN } from '../../lib/constants'
+import TickerAutocomplete from './TickerAutocomplete'
+import { INVESTMENT_TYPES, DEFAULT_EXPECTED_RETURN, DEFAULT_RETURNS_BY_TYPE, API_BASE_URL } from '../../lib/constants'
+
+const FIELD_TOOLTIPS = {
+  ticker: "The stock exchange symbol (e.g., VTI, AAPL, GOOGL). Used to look up real-time price data.",
+  name: "A descriptive name for this investment, e.g., 'Vanguard Total Stock Market ETF'.",
+  type: "The category of investment. Affects risk classification and default expected return.",
+  currentShares: "The number of shares or units you currently hold in this investment.",
+  costBasisPerShare: "The average price you paid per share. Used to calculate unrealized gains and losses.",
+  currentPricePerShare: "The current market price per share. Select a ticker to auto-fill from market data.",
+  monthlyContribution: "How much you plan to invest in this holding each month. Used for growth projections.",
+  expectedAnnualReturn: "The annual growth rate you expect, as a percentage. Historical S&P 500 average is ~10% nominal, ~7% real.",
+  tags: "Custom labels to organize investments (e.g., 'retirement', 'taxable', 'growth'). Type and press Enter to add.",
+  notes: "Any personal notes or reminders about this investment.",
+}
 
 const emptyInvestment = {
   ticker: '',
@@ -15,17 +30,46 @@ const emptyInvestment = {
   expectedAnnualReturn: DEFAULT_EXPECTED_RETURN,
   tags: [],
   notes: '',
+  lastPriceUpdate: null,
 }
 
 export default function InvestmentForm({ investment, tags, onSave, onAddTag, onCancel }) {
   const [form, setForm] = useState(investment ? { ...emptyInvestment, ...investment } : emptyInvestment)
+  const [fetchingPrice, setFetchingPrice] = useState(false)
 
   const handleChange = (e) => {
     const { name, value, type } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === 'number' ? (parseFloat(value) || 0) : value,
-    }))
+    setForm((prev) => {
+      const updated = {
+        ...prev,
+        [name]: type === 'number' ? (parseFloat(value) || 0) : value,
+      }
+      if (name === 'type' && DEFAULT_RETURNS_BY_TYPE[value] !== undefined) {
+        updated.expectedAnnualReturn = DEFAULT_RETURNS_BY_TYPE[value]
+      }
+      return updated
+    })
+  }
+
+  const fetchQuote = async (ticker) => {
+    if (!ticker) return
+    setFetchingPrice(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/stock-quote/${encodeURIComponent(ticker)}`)
+      if (res.ok) {
+        const data = await res.json()
+        setForm(prev => ({
+          ...prev,
+          name: data.name || prev.name,
+          currentPricePerShare: data.price || prev.currentPricePerShare,
+          lastPriceUpdate: new Date().toISOString(),
+        }))
+      }
+    } catch {
+      // Silently fail -- user can still enter price manually
+    } finally {
+      setFetchingPrice(false)
+    }
   }
 
   const handleSubmit = (e) => {
@@ -53,18 +97,22 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
         {/* Ticker & Name */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Ticker / Symbol</label>
-            <input
-              type="text"
-              name="ticker"
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Ticker / Symbol<InfoTooltip text={FIELD_TOOLTIPS.ticker} /></label>
+            <TickerAutocomplete
               value={form.ticker}
-              onChange={handleChange}
-              placeholder="e.g. VTI, AAPL"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm uppercase placeholder:normal-case focus:border-primary focus:outline-none focus:ring-1 focus:ring-ring"
+              onChange={(val) => setForm(prev => ({ ...prev, ticker: val.toUpperCase() }))}
+              onSelect={(result) => {
+                setForm(prev => ({
+                  ...prev,
+                  ticker: result.symbol,
+                  name: result.name || prev.name,
+                }))
+                fetchQuote(result.symbol)
+              }}
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Investment Name</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Investment Name<InfoTooltip text={FIELD_TOOLTIPS.name} /></label>
             <input
               type="text"
               name="name"
@@ -78,7 +126,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
 
         {/* Type */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-muted-foreground">Investment Type</label>
+          <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Investment Type<InfoTooltip text={FIELD_TOOLTIPS.type} /></label>
           <Select name="type" value={form.type} onChange={handleChange}>
             {INVESTMENT_TYPES.map(({ value, label }) => (
               <option key={value} value={value}>{label}</option>
@@ -89,7 +137,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
         {/* Shares & Prices */}
         <div className="grid gap-4 sm:grid-cols-3">
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Current Shares</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Current Shares<InfoTooltip text={FIELD_TOOLTIPS.currentShares} /></label>
             <input
               type="number"
               name="currentShares"
@@ -102,7 +150,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Cost Basis / Share</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Cost Basis / Share<InfoTooltip text={FIELD_TOOLTIPS.costBasisPerShare} /></label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
               <input
@@ -118,7 +166,10 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Current Price / Share</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">
+              Current Price / Share<InfoTooltip text={FIELD_TOOLTIPS.currentPricePerShare} />
+              {fetchingPrice && <span className="ml-2 text-xs text-primary">Fetching...</span>}
+            </label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
               <input
@@ -156,7 +207,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
         {/* Monthly Contribution & Expected Return */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Monthly Contribution</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Monthly Contribution<InfoTooltip text={FIELD_TOOLTIPS.monthlyContribution} /></label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
               <input
@@ -172,7 +223,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-muted-foreground">Expected Annual Return</label>
+            <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Expected Annual Return<InfoTooltip text={FIELD_TOOLTIPS.expectedAnnualReturn} /></label>
             <div className="relative">
               <input
                 type="number"
@@ -190,7 +241,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
 
         {/* Tags */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-muted-foreground">Tags</label>
+          <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Tags<InfoTooltip text={FIELD_TOOLTIPS.tags} /></label>
           <TagManager
             selectedTags={form.tags}
             availableTags={tags}
@@ -201,7 +252,7 @@ export default function InvestmentForm({ investment, tags, onSave, onAddTag, onC
 
         {/* Notes */}
         <div>
-          <label className="mb-1 block text-sm font-medium text-muted-foreground">Notes (optional)</label>
+          <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">Notes (optional)<InfoTooltip text={FIELD_TOOLTIPS.notes} /></label>
           <Textarea
             name="notes"
             value={form.notes}
