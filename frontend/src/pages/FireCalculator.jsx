@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { useTheme } from '../components/ui/ThemeContext'
+import { InfoTooltip } from '../components/ui/info-tooltip'
 import { formatCurrency } from '../lib/formatters'
 import { API_BASE_URL, STORAGE_KEYS } from '../lib/constants'
 
@@ -53,14 +54,22 @@ export default function FireCalculator() {
   }
 
   const inputFields = [
-    { name: 'current_age', label: 'Current Age', suffix: 'years' },
-    { name: 'retirement_age', label: 'Target Retirement Age', suffix: 'years' },
-    { name: 'current_savings', label: 'Current Savings', prefix: '$' },
-    { name: 'annual_income', label: 'Annual Income', prefix: '$' },
-    { name: 'annual_expenses', label: 'Annual Expenses', prefix: '$' },
-    { name: 'savings_rate', label: 'Savings Rate', suffix: '%' },
-    { name: 'expected_return', label: 'Expected Return', suffix: '%' },
-    { name: 'withdrawal_rate', label: 'Withdrawal Rate', suffix: '%' },
+    { name: 'current_age', label: 'Current Age', suffix: 'years',
+      tooltip: 'Your current age. Used as the starting point for projections.' },
+    { name: 'retirement_age', label: 'Target Retirement Age', suffix: 'years',
+      tooltip: 'The age at which you plan to retire or achieve financial independence.' },
+    { name: 'current_savings', label: 'Current Savings', prefix: '$',
+      tooltip: 'Total amount currently saved and invested across all accounts.' },
+    { name: 'annual_income', label: 'Annual Income', prefix: '$',
+      tooltip: 'Your gross annual income before taxes. Used with savings rate to calculate annual contributions.' },
+    { name: 'annual_expenses', label: 'Annual Expenses', prefix: '$',
+      tooltip: 'Your total annual spending. This determines your FI/RE number (expenses / withdrawal rate).' },
+    { name: 'savings_rate', label: 'Savings Rate', suffix: '%',
+      tooltip: 'Percentage of income saved annually. Higher savings rates dramatically reduce time to FI/RE.' },
+    { name: 'expected_return', label: 'Expected Return', suffix: '%',
+      tooltip: 'Expected annual investment return. Historically, the S&P 500 averages ~10% nominal, ~7% inflation-adjusted.' },
+    { name: 'withdrawal_rate', label: 'Withdrawal Rate', suffix: '%',
+      tooltip: 'Annual withdrawal percentage in retirement. The 4% rule is a common guideline from the Trinity Study.' },
   ]
 
   return (
@@ -70,9 +79,12 @@ export default function FireCalculator() {
         <div className="rounded-lg border border-border bg-card p-6 shadow-sm transition-colors duration-300">
           <h2 className="mb-4 text-lg font-semibold text-card-foreground">Your Financial Details</h2>
           <div className="space-y-4">
-            {inputFields.map(({ name, label, prefix, suffix }) => (
+            {inputFields.map(({ name, label, prefix, suffix, tooltip }) => (
               <div key={name}>
-                <label className="mb-1 block text-sm font-medium text-muted-foreground">{label}</label>
+                <label className="mb-1 flex items-center text-sm font-medium text-muted-foreground">
+                  {label}
+                  {tooltip && <InfoTooltip text={tooltip} />}
+                </label>
                 <div className="relative">
                   {prefix && (
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">{prefix}</span>

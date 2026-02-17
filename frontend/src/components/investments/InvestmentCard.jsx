@@ -2,7 +2,7 @@ import { Badge } from '../ui/badge'
 import { formatCurrency, formatPercent } from '../../lib/formatters'
 import { INVESTMENT_TYPE_MAP, RISK_TIERS } from '../../lib/constants'
 
-export default function InvestmentCard({ investment, onSelect, onEdit, onDelete, isSelected }) {
+export default function InvestmentCard({ investment, onSelect, onEdit, onDelete, onRefreshPrice, isSelected }) {
   const currentValue = investment.currentShares * investment.currentPricePerShare
   const costBasis = investment.currentShares * investment.costBasisPerShare
   const gainLoss = currentValue - costBasis
@@ -50,6 +50,15 @@ export default function InvestmentCard({ investment, onSelect, onEdit, onDelete,
             >
               Edit
             </button>
+            {investment.ticker && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRefreshPrice(investment) }}
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+                title="Refresh current price"
+              >
+                Refresh
+              </button>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(investment.id) }}
               className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30 dark:hover:text-red-400 transition-colors"
@@ -61,10 +70,13 @@ export default function InvestmentCard({ investment, onSelect, onEdit, onDelete,
       </div>
 
       {/* Bottom row: Monthly contribution & expected return */}
-      <div className="mt-3 flex gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
+      <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
         <span>{investment.currentShares} shares @ {formatCurrency(investment.currentPricePerShare)}/ea</span>
         <span className="border-l border-border pl-4">{formatCurrency(investment.monthlyContribution)}/mo contribution</span>
         <span className="border-l border-border pl-4">{formatPercent(investment.expectedAnnualReturn)} expected return</span>
+        {investment.lastPriceUpdate && (
+          <span className="border-l border-border pl-4">Updated {new Date(investment.lastPriceUpdate).toLocaleDateString()}</span>
+        )}
       </div>
     </div>
   )
